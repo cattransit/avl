@@ -3,12 +3,11 @@
 -include("gtfsrt_pb.hrl").
 
 start(FileName) ->
-  Reader = fun (Filename) -> {ok, Contents} = file:read_file(Filename), Contents end,
-  Lines = string:tokens(binary_to_list(Reader(FileName)), "\r\n"),
+  {ok, [IPs]} = file:consult(FileName),
   StartingFeed = #feedmessage{header=#feedheader{gtfs_realtime_version="1.0"},entity=[]},
   PID = spawn(?MODULE, protocol_buffers, [StartingFeed]),
   SpawnConnect = fun(IP) -> spawn(?MODULE, connect, [IP, PID]) end,
-  lists:foreach(SpawnConnect, Lines).
+  lists:foreach(SpawnConnect, IPs).
 
 connect(IP, PID) ->
   PORT = 8016,
