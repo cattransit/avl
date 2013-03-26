@@ -1,6 +1,8 @@
 -module(cat_avl).
 -compile(export_all).
 -include("gtfsrt_pb.hrl").
+-define(USERNAME, "admin").
+-define(PASSWORD, "").
 
 start(FileName) ->
   {ok, [IPs]} = file:consult(FileName),
@@ -30,7 +32,7 @@ recv_loop(Socket, IP, PID, VID) ->
   end.
 
 handle_message(Socket, _PID, 20, _Content, _VID) ->
-  idis:send_login(Socket, "admin", ""),
+  idis:send_login(Socket, ?USERNAME, ?PASSWORD),
   ok;
 handle_message(_Socket, _PID, 3, <<255, 255, 255, 255>>, _VID) ->
   ok;
