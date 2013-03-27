@@ -16,7 +16,7 @@ connect(IP, PID) ->
   case gen_tcp:connect(IP, PORT, [binary, {active,false}, {packet,raw}], infinity) of
     {ok, Socket} ->
       idis:send_init(Socket),
-      recv_loop(Socket, IP, PID, ok);
+      recv_loop(Socket, IP, PID, undefined);
     {error, etimedout} -> connect(IP, PID);
     {error, econnrefused} -> connect(IP, PID)
   end.
@@ -26,21 +26,20 @@ recv_loop(Socket, IP, PID, VID) ->
     {error, closed} -> connect(IP, PID);
     {Type, Content} ->
       case handle_message(Socket, PID, Type, Content, VID) of
-        ok -> recv_loop(Socket, IP, PID, VID);
-        NewVID -> io:fwrite("Connected to ~p (Bus ~p)~n", [IP, NewVID]), recv_loop(Socket, IP, PID, NewVID)
+        {vid, NewVID} -> io:fwrite("Connected to ~p (Bus ~p)~n", [IP, NewVID]), recv_loop(Socket, IP, PID, NewVID);
+        _ -> recv_loop(Socket, IP, PID, VID)
       end
   end.
 
 handle_message(Socket, _PID, 20, _Content, _VID) ->
-  idis:send_login(Socket, ?USERNAME, ?PASSWORD),
-  ok;
+  idis:send_login(Socket, ?USERNAME, ?PASSWORD);
 handle_message(_Socket, _PID, 3, <<255, 255, 255, 255>>, _VID) ->
   ok;
 handle_message(_Socket, _PID, 18, _Content, _VID) ->
   ok;
 handle_message(_Socket, _PID, 15, Content, _VID) ->
   {_, [BusID]} = re:run(Content, "Bus (\\d*)", [{capture, all_but_first, list}]),
-  BusID;
+  {vid, BusID};
 handle_message(_Socket, PID, 98, Content, VID) ->
   case re:run(Content, "\\$(?:GPRMC).*?\\*.{2}", [{capture, first, list}]) of
     {_, [NMEA_sentence]} ->
@@ -50,8 +49,7 @@ handle_message(_Socket, PID, 98, Content, VID) ->
         "A" ->
           Lat = nmea_to_wgs84(LatN, LatCompass),
           Lon = nmea_to_wgs84(LonN, LonCompass),
-          PID ! {VID, Lat, Lon},
-          ok;
+          PID ! {VID, Lat, Lon};
         "V" ->
           ok
       end;
