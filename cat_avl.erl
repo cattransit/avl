@@ -58,8 +58,8 @@ handle_message(_Socket, PID, 98, Content, VID) ->
 
 protocol_buffers(Feed) ->
   receive
-    {VehicleID, Lat, Lon} ->
-      NewEntities = lists:keystore(VehicleID, #feedentity.id, Feed#feedmessage.entity, #feedentity{id=VehicleID, vehicle=#vehicleposition{vehicle=#vehicledescriptor{id=VehicleID},position=#position{latitude=Lat,longitude=Lon}}}),
+    {VID, Lat, Lon} ->
+      NewEntities = lists:keystore(VID, #feedentity.id, Feed#feedmessage.entity, #feedentity{id=VID, vehicle=#vehicleposition{vehicle=#vehicledescriptor{id=VID},position=#position{latitude=Lat,longitude=Lon}}}),
       NewFeed = Feed#feedmessage{entity=NewEntities},
       PB = gtfsrt_pb:encode_feedmessage(NewFeed),
       file:write_file("gtfsrt.pb", PB),
