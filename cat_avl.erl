@@ -4,10 +4,12 @@
 -define(USERNAME, "admin").
 -define(PASSWORD, "").
 
-start(FileName) ->
-  {ok, [IPs]} = file:consult(FileName),
+start(IPsFileName) ->
+  start(IPsFileName, "cat_avl.pb").
+start(IPsFileName, OutputFileName) ->
+  {ok, [IPs]} = file:consult(IPsFileName),
   InitialFeed = #feedmessage{header=#feedheader{gtfs_realtime_version="1.0"},entity=[]},
-  PID = spawn(?MODULE, protocol_buffers, [InitialFeed]),
+  PID = spawn(?MODULE, protocol_buffers, [InitialFeed, OutputFileName]),
   SpawnConnection = fun(IP) -> spawn(?MODULE, connect, [IP, PID]) end,
   lists:foreach(SpawnConnection, IPs).
 
@@ -56,14 +58,14 @@ handle_message(_Socket, PID, 98, Content, VID) ->
     _ -> ok
   end.
 
-protocol_buffers(Feed) ->
+protocol_buffers(Feed, OutputFileName) ->
   receive
     {VID, Lat, Lon} ->
       NewEntities = lists:keystore(VID, #feedentity.id, Feed#feedmessage.entity, #feedentity{id=VID, vehicle=#vehicleposition{vehicle=#vehicledescriptor{id=VID},position=#position{latitude=Lat,longitude=Lon}}}),
       NewFeed = Feed#feedmessage{entity=NewEntities},
       PB = gtfsrt_pb:encode_feedmessage(NewFeed),
-      file:write_file("gtfsrt.pb", PB),
-      protocol_buffers(NewFeed);
+      file:write_file(OutputFileName, PB),
+      protocol_buffers(NewFeed, OutputFileName);
     terminate ->
       ok
   end.
