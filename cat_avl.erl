@@ -8,8 +8,7 @@ start(IPsFileName) ->
   start(IPsFileName, "cat_avl.pb").
 start(IPsFileName, OutputFileName) ->
   {ok, [IPs]} = file:consult(IPsFileName),
-  InitialFeed = #feedmessage{header=#feedheader{gtfs_realtime_version="1.0"},entity=[]},
-  PID = spawn(?MODULE, protocol_buffers, [InitialFeed, OutputFileName]),
+  PID = spawn(?MODULE, protocol_buffers, [undefined, OutputFileName]),
   SpawnConnection = fun(IP) -> spawn(?MODULE, connect, [IP, PID]) end,
   lists:foreach(SpawnConnection, IPs).
 
@@ -46,22 +45,26 @@ handle_message(_Socket, PID, 98, Content, VID) ->
   case re:run(Content, "\\$(?:GPRMC).*?\\*.{2}", [{capture, first, list}]) of
     {_, [NMEA_sentence]} ->
       NMEA = string:tokens(NMEA_sentence,","),
-      [GPSLock, LatN, LatCompass, LonN, LonCompass] = lists:sublist(NMEA, 3, 5),
+      [GPSLock, LatN, LatCompass, LonN, LonCompass, Knots] = lists:sublist(NMEA, 3, 6),
       case GPSLock of
         "A" ->
           Lat = nmea_to_wgs84(LatN, LatCompass),
           Lon = nmea_to_wgs84(LonN, LonCompass),
-          PID ! {VID, Lat, Lon};
+          Speed = (Knots * 1852) / 3600,
+          PID ! {VID, Lat, Lon, Speed};
         "V" ->
           ok
       end;
     _ -> ok
   end.
 
+protocol_buffers(undefined, OutputFileName) ->
+  Feed = #feedmessage{header=#feedheader{gtfs_realtime_version="1.0"},entity=[]},
+  protocol_buffers(Feed, OutputFileName);
 protocol_buffers(Feed, OutputFileName) ->
   receive
-    {VID, Lat, Lon} ->
-      NewEntities = lists:keystore(VID, #feedentity.id, Feed#feedmessage.entity, #feedentity{id=VID, vehicle=#vehicleposition{vehicle=#vehicledescriptor{id=VID},position=#position{latitude=Lat,longitude=Lon}}}),
+    {VID, Lat, Lon, Speed} ->
+      NewEntities = lists:keystore(VID, #feedentity.id, Feed#feedmessage.entity, #feedentity{id=VID, vehicle=#vehicleposition{vehicle=#vehicledescriptor{id=VID},position=#position{latitude=Lat,longitude=Lon,speed=Speed}}}),
       NewFeed = Feed#feedmessage{entity=NewEntities},
       PB = gtfsrt_pb:encode_feedmessage(NewFeed),
       file:write_file(OutputFileName, PB),
